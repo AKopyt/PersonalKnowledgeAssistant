@@ -1,0 +1,16 @@
+[project]
+name = "personal-knowledge-assistant"
+version = "0.1.0"
+description = ""
+requires-python = ">=3.10"
+
+dependencies = [
+    "langchain>=0.3.27",
+    "pypdf>=6.0.0",
+    "python-docx>=1.2.0",
+    "python-dotenv>=1.1.1",
+    "qdrant-client>=1.15.1",
+    "streamlit>=1.48.0",
+
+]
+
