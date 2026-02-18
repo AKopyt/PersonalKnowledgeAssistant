@@ -69,10 +69,22 @@ This starts two containers:
 
 ### 3. Query your documents
 
+Install the client dependency:
+
+```bash
+pip install requests
+```
+
 Run the console client:
 
 ```bash
-uv run python -m src.ConsoleClient.main
+python3 src/ConsoleClient/main.py
+```
+
+By default it connects to `http://127.0.0.1:8000`. To use a different server:
+
+```bash
+python3 src/ConsoleClient/main.py --url http://192.168.1.10:8000
 ```
 
 ## Environment Variables
@@ -84,6 +96,5 @@ These are configured automatically in `docker-compose.yml` for containerized dep
 | `WEAVIATE_URL` | Weaviate database URL | `http://weaviate:8080` |
 | `EMBEDDING_MODEL_URL` | Ollama embeddings endpoint | `http://host.docker.internal:11434/api/embeddings` |
 | `OLLAMA_URL` | Ollama generation endpoint | `http://host.docker.internal:11434/api/generate` |
-| `RETRIEVER_URL` | RetrieverServer URL (used by ConsoleClient) | — |
 
 For local development without Docker, copy `.env_template` to `.env` and fill in the values.

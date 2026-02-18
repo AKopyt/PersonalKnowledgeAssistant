@@ -1,32 +1,36 @@
-import requests
-import json
+import argparse
 import sys
-import os
-from dotenv import load_dotenv
+import requests
 
-load_dotenv()
 
-def send_question_to_server(question: str, base_url: str = os.getenv("RETRIEVER_URL")) -> dict:
+DEFAULT_URL = "http://127.0.0.1:8000"
+
+
+def send_question_to_server(question: str, base_url: str) -> dict:
     """Send question to RetrieverServer and return response"""
     url = f"{base_url}/search"
     payload = {"question": question}
 
     try:
-        response = requests.post(url, json=payload, timeout=120)  # 2 min timeout for slow Ollama
+        response = requests.post(url, json=payload, timeout=120)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.ConnectionError:
-        return {"error": "Could not connect to server. Make sure RetrieverServer is running on 127.0.0.1:8000"}
+        return {"error": f"Could not connect to server. Make sure RetrieverServer is running on {base_url}"}
     except requests.exceptions.Timeout:
         return {"error": "Request timed out. Ollama might be loading the model (this can take 30-60 seconds on first request)"}
     except requests.exceptions.RequestException as e:
         return {"error": f"Request failed: {str(e)}"}
 
+
 def main():
-    """Main console client loop"""
+    parser = argparse.ArgumentParser(description="Personal Knowledge Assistant Console Client")
+    parser.add_argument("--url", default=DEFAULT_URL, help=f"RetrieverServer URL (default: {DEFAULT_URL})")
+    args = parser.parse_args()
+
     print("=== Personal Knowledge Assistant Console Client ===")
+    print(f"Server: {args.url}")
     print("Type 'quit' or 'exit' to stop")
-    print("Make sure RetrieverServer is running on 127.0.0.1:8000")
     print("-" * 50)
 
     while True:
@@ -42,19 +46,20 @@ def main():
                 continue
 
             print("Sending question to server...")
-            response = send_question_to_server(question)
+            response = send_question_to_server(question, args.url)
 
             if "error" in response:
-                print(f"L Error: {response['error']}")
+                print(f"Error: {response['error']}")
             else:
-                print(f"=� Question: {response.get('question', 'N/A')}")
-                print(f"=� Answer: {response.get('answer', 'No answer received')}")
+                print(f"Question: {response.get('question', 'N/A')}")
+                print(f"Answer: {response.get('answer', 'No answer received')}")
 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
             sys.exit(0)
         except Exception as e:
-            print(f"L Unexpected error: {str(e)}")
+            print(f"Unexpected error: {str(e)}")
+
 
 if __name__ == "__main__":
     main()
