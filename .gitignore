@@ -211,3 +211,4 @@ data/
 
 # Claude Code assistant files
 CLAUDE.md
+.claude/
