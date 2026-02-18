@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Documentation and Claude files
+*.md
+CLAUDE.md
+README.md
+
+# Environment files (should be mounted or passed as env vars)
+.env
+
+# Data files (should be mounted as volume)
+data/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -19,9 +19,3 @@ def load_doc(file_path: str) -> str:
     for paragraph in document.paragraphs:
         text += paragraph.text + "\n"
     return text
-
-#doc = load_doc(r"C:\Users\agata\Desktop\DataScienceProjects\PersonalKnowledgeAssistant\PersonalKnowledgeAssistant\data\documents\demo.docx")
-#pdf = load_pdf(r"C:\Users\agata\Desktop\DataScienceProjects\PersonalKnowledgeAssistant\PersonalKnowledgeAssistant\data\documents\test_pdf.pdf")
-txt = load_txt(r"C:\Users\agata\Desktop\DataScienceProjects\PersonalKnowledgeAssistant\PersonalKnowledgeAssistant\data\documents\test_txt.txt")
-
-print(txt)

@@ -12,11 +12,13 @@ def send_question_to_server(question: str, base_url: str = os.getenv("RETRIEVER_
     payload = {"question": question}
 
     try:
-        response = requests.get(url, json=payload)
+        response = requests.post(url, json=payload, timeout=120)  # 2 min timeout for slow Ollama
         response.raise_for_status()
         return response.json()
     except requests.exceptions.ConnectionError:
-        return {"error": "Could not connect to server. Make sure RetrieverServer is running on localhost:8000"}
+        return {"error": "Could not connect to server. Make sure RetrieverServer is running on 127.0.0.1:8000"}
+    except requests.exceptions.Timeout:
+        return {"error": "Request timed out. Ollama might be loading the model (this can take 30-60 seconds on first request)"}
     except requests.exceptions.RequestException as e:
         return {"error": f"Request failed: {str(e)}"}
 
@@ -24,7 +26,7 @@ def main():
     """Main console client loop"""
     print("=== Personal Knowledge Assistant Console Client ===")
     print("Type 'quit' or 'exit' to stop")
-    print("Make sure RetrieverServer is running on localhost:8000")
+    print("Make sure RetrieverServer is running on 127.0.0.1:8000")
     print("-" * 50)
 
     while True:

@@ -1,83 +1,100 @@
+import logging
 import os
-from typing import Dict, List, Any
-from src.document_processing.loaders import load_pdf, load_txt, load_doc
-from src.document_processing.chunking.fixed_size import FixedSizeChunking
-from src.database.weaviate_client import save_text_to_vector_db
-from src.enums.file_types import FileType
-from src.enums.chunking_types import ChunkingType
+from typing import List
+
+logger = logging.getLogger(__name__)
+
+from src.document_processing.loader_registry import (
+    DocumentLoaderRegistry,
+    create_default_loader_registry,
+)
+from src.document_processing.chunking.factory import (
+    ChunkingStrategyFactory,
+    create_default_chunking_factory,
+)
+from src.document_processing.text_embedder import get_embedding
+from src.document_processing.chunk_formatter import format_chunk
+from src.database.base import VectorStore
 
 
 class DocumentProcessor:
+    """Thin orchestration facade for the document processing pipeline."""
 
-    def __init__(self, data_directory, chunking_type, collection_name="Documents"):
+    def __init__(
+        self,
+        data_directory: str,
+        chunking_type: str,
+        embedding_url: str,
+        vector_store: VectorStore,
+        chunk_size: int = 1000,
+        embedding_model: str = "all-minilm",
+        loader_registry: DocumentLoaderRegistry = None,
+        chunking_factory: ChunkingStrategyFactory = None,
+    ):
         self.data_directory = data_directory
         self.chunking_type = chunking_type
-        self.collection_name = collection_name
+        self.chunk_size = chunk_size
+        self.embedding_model = embedding_model
+        self.embedding_url = embedding_url
 
-    def load_documents(self, filename: str) -> str:
-        file_path = os.path.join(self.data_directory, filename)
-        ext = os.path.splitext(file_path)[1].lower()
-        
-        if ext == FileType.PDF.value:
-            return load_pdf(file_path)
-        elif ext == FileType.TXT.value:
-            return load_txt(file_path)
-        elif ext in [FileType.DOC.value, FileType.DOCX.value]:
-            return load_doc(file_path)
-        else:
-            raise ValueError(f"Unsupported file type: {ext}")
+        self.loader_registry = loader_registry or create_default_loader_registry()
+        self.chunking_factory = chunking_factory or create_default_chunking_factory()
+        self.vector_store = vector_store
 
-    def chunk_text(self, text: str, metadata: Dict[str, Any], chunk_size: int = 1000) -> List[Dict]:
-        if self.chunking_type == ChunkingType.FIXED_SIZE.value:
-            chunker = FixedSizeChunking()
-            return chunker.chunk(text, metadata, chunk_size)
-        elif self.chunking_type == ChunkingType.SEMANTIC.value:
-            raise NotImplementedError("Semantic chunking not implemented yet")
-        elif self.chunking_type == ChunkingType.SENTENCE.value:
-            raise NotImplementedError("Sentence chunking not implemented yet")
-        else:
-            raise ValueError(f"Unsupported chunking type: {self.chunking_type}")
+    def process_file(self, filename: str, chunk_size: int = None,
+                     model: str = None) -> List[str]:
+        """Process a single file: load -> chunk -> embed -> store."""
+        chunk_size = chunk_size or self.chunk_size
+        model = model or self.embedding_model
 
-
-    def process_file(self, filename: str, chunk_size: int = 1000, model: str = "all-minilm") -> List[str]:
         try:
-            text = self.load_documents(filename)
-            print(f"Loaded file: {len(text)} characters")
-
+            # 1. Load
             file_path = os.path.join(self.data_directory, filename)
-            metadata = {
-                "file_path": file_path,
-                "file_name": filename
-            }
+            text = self.loader_registry.load(file_path)
+            logger.info(f"Loaded file: {len(text)} characters")
 
-            chunks = self.chunk_text(text, metadata, chunk_size)
-            print(f"Created {len(chunks)} chunks")
+            # 2. Chunk
+            metadata = {"file_path": file_path, "file_name": filename}
+            chunker = self.chunking_factory.create(
+                self.chunking_type, chunk_size=chunk_size
+            )
+            chunks = chunker.chunk(text, metadata)
+            logger.info(f"Created {len(chunks)} chunks")
 
-            saved_ids = []
-            
-            for i, chunk_data in enumerate(chunks):
-                try:
-                    chunk_text = chunk_data["text"]
-                    chunk_with_info = f"[File: {filename}, Chunk: {i+1}/{len(chunks)}]\n\n{chunk_text}"
+            # 3. Embed and store
+            saved_ids = self._embed_and_store(chunks, filename, model)
 
-                    object_id = save_text_to_vector_db(
-                        text=chunk_with_info,
-                        collection_name=self.collection_name,
-                        model=model
-                    )
-                    
-                    if object_id:
-                        saved_ids.append(object_id)
-                        print(f"Saved chunk {i+1}/{len(chunks)}")
-                    else:
-                        print(f"Failed to save chunk {i+1}")
-                        
-                except Exception as e:
-                    print(f"Error processing chunk {i+1}: {e}")
-            
-            print(f"Processing complete! Saved {len(saved_ids)}/{len(chunks)} chunks")
+            logger.info(f"Processing complete! Saved {len(saved_ids)}/{len(chunks)} chunks")
             return saved_ids
-            
+
         except Exception as e:
-            print(f"Error processing file: {e}")
+            logger.error(f"Error processing file: {e}")
             return []
+
+    def _embed_and_store(self, chunks: List[dict], filename: str,
+                         model: str) -> List[str]:
+        """Embed each chunk and persist it to the vector store."""
+        saved_ids = []
+        total = len(chunks)
+
+        for i, chunk_data in enumerate(chunks):
+            try:
+                chunk_text = chunk_data["text"]
+                chunk_with_info = format_chunk(filename, i + 1, total, chunk_text)
+
+                embedding = get_embedding(chunk_with_info, self.embedding_url, model)
+                if not embedding:
+                    logger.warning(f"Failed to embed chunk {i+1}")
+                    continue
+
+                object_id = self.vector_store.save(chunk_with_info, embedding)
+                if object_id:
+                    saved_ids.append(object_id)
+                    logger.info(f"Saved chunk {i+1}/{total}")
+                else:
+                    logger.warning(f"Failed to save chunk {i+1}")
+
+            except Exception as e:
+                logger.error(f"Error processing chunk {i+1}: {e}")
+
+        return saved_ids
